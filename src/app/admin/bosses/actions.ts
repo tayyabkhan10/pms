@@ -1,3 +1,4 @@
+//src/app/admin/bosses/actions.ts
 "use server";
 
 import { z } from "zod";
@@ -16,8 +17,8 @@ const bossSchema = z.object({
 });
 
 function revalidate() {
-  revalidatePath("/admin/settings");
-  revalidateTag("bosses");
+  revalidatePath("/admin/settings", "layout");
+  revalidateTag("bosses", "max");
 }
 
 export async function createBoss(

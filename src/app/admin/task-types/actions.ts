@@ -1,3 +1,4 @@
+//src/app/admin/task-types/actions.ts
 "use server";
 
 import { z } from "zod";
@@ -13,7 +14,7 @@ const nameSchema = z.object({ name: z.string().min(1, "Name is required") });
 
 function revalidate() {
   revalidatePath("/admin/settings");
-  revalidateTag("task-types");
+  revalidateTag("task-types", "max");
 }
 
 export async function createTaskType(

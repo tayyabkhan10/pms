@@ -1,3 +1,4 @@
+// src/app/admin/platforms/actions.ts
 "use server";
 
 import { z } from "zod";
@@ -13,9 +14,8 @@ const nameSchema = z.object({ name: z.string().min(1, "Name is required") });
 
 function revalidate() {
   revalidatePath("/admin/settings");
-  revalidateTag("platforms");
+  revalidateTag("platforms", "max");
 }
-
 export async function createPlatform(
   _prevState: ActionState,
   formData: FormData
