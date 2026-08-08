@@ -75,7 +75,7 @@ export function EmployeesClient({ rows }: { rows: Row[] }) {
                 <td className="px-4 py-2 text-right text-sm">
                   <button
                     onClick={() => setModal(row.user.id)}
-                    className="inline-flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
+                    className="inline-flex items-center gap-1 font-medium text-brand-600 hover:text-brand-800"
                   >
                     <Pencil size={14} /> Edit
                   </button>
