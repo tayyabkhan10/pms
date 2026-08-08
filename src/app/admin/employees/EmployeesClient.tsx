@@ -66,7 +66,7 @@ export function EmployeesClient({ rows }: { rows: Row[] }) {
                     className={
                       row.user.isActive
                         ? "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700"
-                        : "rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500"
+                        : "rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600"
                     }
                   >
                     {row.user.isActive ? "Active" : "Inactive"}
