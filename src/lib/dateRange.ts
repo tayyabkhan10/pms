@@ -1,3 +1,5 @@
+import { toLocalISODate } from "@/lib/date";
+
 export const RANGE_PRESETS = [
   { key: "today", label: "Today" },
   { key: "3d", label: "3 Days" },
@@ -7,9 +9,7 @@ export const RANGE_PRESETS = [
 
 export type RangePreset = (typeof RANGE_PRESETS)[number]["key"];
 
-function toISODate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
+const toISODate = toLocalISODate;
 
 // Resolves a preset key (or explicit from/to overrides) into concrete ISO date bounds.
 export function resolveDateRange(params: { preset?: string; from?: string; to?: string }) {

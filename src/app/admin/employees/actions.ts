@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { employees, roles, users } from "@/db/schema";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -69,21 +69,25 @@ export async function createEmployee(
   }
 
   try {
-    await db.insert(users).values({
-      id: data.user.id,
-      roleId: employeeRoleId,
-      name,
-      email,
-      passwordEncrypted: encryptSecret(password),
-    });
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: data.user.id,
+        roleId: employeeRoleId,
+        name,
+        email,
+        passwordEncrypted: encryptSecret(password),
+      });
 
-    await db.insert(employees).values({
-      userId: data.user.id,
-      designation,
-      phone,
-      hireDate: hireDate || undefined,
+      await tx.insert(employees).values({
+        userId: data.user.id,
+        designation,
+        phone,
+        hireDate: hireDate || undefined,
+      });
     });
   } catch (err) {
+    // Both DB inserts rolled back together above — only the Supabase Auth account (created
+    // outside the transaction) needs manual cleanup here.
     await supabaseAdmin.auth.admin.deleteUser(data.user.id);
     return { error: err instanceof Error ? err.message : "Failed to create employee" };
   }
@@ -135,15 +139,23 @@ export async function updateEmployee(
     if (error) return { error: error.message };
   }
 
-  await db
-    .update(users)
-    .set({ name, email, isActive, updatedAt: new Date() })
-    .where(eq(users.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(users)
+      .set({ name, email, isActive, updatedAt: new Date() })
+      .where(eq(users.id, id));
 
-  await db
-    .update(employees)
-    .set({ designation, phone, hireDate: hireDate || undefined, isActive, updatedAt: new Date() })
-    .where(eq(employees.userId, id));
+    await tx
+      .update(employees)
+      .set({
+        designation,
+        phone,
+        hireDate: hireDate || undefined,
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(employees.userId, id));
+  });
 
   revalidatePath("/admin/employees");
   return { success: true };
@@ -191,10 +203,21 @@ export async function revealPassword(id: string): Promise<string> {
   return decryptSecret(record.passwordEncrypted);
 }
 
+// Soft-delete: the employee moves into the Recycle Bin (see src/app/admin/recycle-bin) and
+// can be restored by an admin within 7 days. Their Supabase Auth account and DB rows are left
+// untouched — only isActive/deletedAt flip, which also blocks login immediately (login checks
+// users.isActive). A scheduled purge job hard-deletes both once the 7-day window passes.
 export async function deleteEmployee(id: string) {
   await requireAdmin();
 
-  await db.delete(users).where(eq(users.id, id));
-  await supabaseAdmin.auth.admin.deleteUser(id);
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ isActive: false, updatedAt: now }).where(eq(users.id, id));
+    await tx
+      .update(employees)
+      .set({ isActive: false, deletedAt: now, updatedAt: now })
+      .where(eq(employees.userId, id));
+  });
+
   revalidatePath("/admin/employees");
 }

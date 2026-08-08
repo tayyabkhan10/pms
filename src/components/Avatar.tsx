@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 function initials(name: string) {
   return name
     .trim()
@@ -19,11 +21,16 @@ export function Avatar({
   const style = { width: size, height: size };
 
   if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
+    // Local preview blobs (from AvatarUpload, before the Cloudinary round-trip completes)
+    // can't go through Next's image optimizer — it needs a server-fetchable URL.
+    const isBlobPreview = url.startsWith("blob:");
     return (
-      <img
+      <Image
         src={url}
         alt={name}
+        width={size}
+        height={size}
+        unoptimized={isBlobPreview}
         style={style}
         className="shrink-0 rounded-full object-cover"
       />

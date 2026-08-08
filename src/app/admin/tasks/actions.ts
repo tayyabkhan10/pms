@@ -1,14 +1,18 @@
 "use server";
 
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { clients, tasks, taskUpdateRequests } from "@/db/schema";
+import { clients, tasks, taskUpdateRequests, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/authGuard";
 import { getCurrentUser } from "@/lib/auth";
 import { STATUSES } from "@/lib/status";
+import { PRIORITIES } from "@/lib/priority";
+import { todayLocalISODate } from "@/lib/date";
+import { createNotification, notifyAllAdmins } from "@/lib/notifications";
+import { sendMail } from "@/lib/mailer";
 
 export type ActionState = { error?: string; success?: boolean };
 
@@ -18,6 +22,7 @@ const createTaskSchema = z.object({
   taskTypeId: z.string().uuid("Task type is required"),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
+  priority: z.enum(PRIORITIES).default("Medium"),
   assignedDate: z.string().min(1),
   dueDate: z.string().optional(),
 });
@@ -34,15 +39,18 @@ export async function createTask(
     taskTypeId: formData.get("taskTypeId"),
     title: formData.get("title"),
     description: formData.get("description") || undefined,
+    priority: formData.get("priority") || undefined,
     assignedDate: formData.get("assignedDate"),
     dueDate: formData.get("dueDate") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const client = await db.query.clients.findFirst({
-    where: eq(clients.id, parsed.data.clientId),
-  });
+  const [client, assignee] = await Promise.all([
+    db.query.clients.findFirst({ where: eq(clients.id, parsed.data.clientId) }),
+    db.query.users.findFirst({ where: eq(users.id, parsed.data.assignedTo) }),
+  ]);
   if (!client) return { error: "Client not found" };
+  if (!assignee) return { error: "Employee not found" };
 
   await db.insert(tasks).values({
     taskId: `TSK-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -51,6 +59,7 @@ export async function createTask(
     taskTypeId: parsed.data.taskTypeId,
     title: parsed.data.title,
     description: parsed.data.description,
+    priority: parsed.data.priority,
     assignedDate: parsed.data.assignedDate,
     dueDate: parsed.data.dueDate || undefined,
     // Denormalized copy from the client at assignment time — mirrors the sheet's auto-fill formulas.
@@ -58,14 +67,29 @@ export async function createTask(
     brandGroup: client.brandGroup,
   });
 
+  await createNotification({
+    userId: assignee.id,
+    type: "task_assigned",
+    title: `New task assigned: ${parsed.data.title}`,
+    body: `${client.name} — due ${parsed.data.dueDate || "no due date"}`,
+    link: "/employee/tasks",
+  });
+  await sendMail({
+    to: assignee.email,
+    subject: `New task assigned: ${parsed.data.title}`,
+    html: `<p>Hi ${assignee.name},</p><p>A new task has been assigned to you:</p><ul><li><b>Task:</b> ${parsed.data.title}</li><li><b>Client:</b> ${client.name}</li><li><b>Priority:</b> ${parsed.data.priority}</li><li><b>Due date:</b> ${parsed.data.dueDate || "Not set"}</li></ul><p>Log in to view details.</p>`,
+  });
+
   revalidatePath("/admin/tasks");
   revalidatePath("/employee/tasks");
   return { success: true };
 }
 
+// Soft-delete: moves the task into the Recycle Bin (see src/app/admin/recycle-bin) rather than
+// destroying it immediately, so an admin can undo an accidental delete within 7 days.
 export async function deleteTask(id: string) {
   await requireAdmin();
-  await db.delete(tasks).where(eq(tasks.id, id));
+  await db.update(tasks).set({ deletedAt: new Date() }).where(eq(tasks.id, id));
   revalidatePath("/admin/tasks");
   revalidatePath("/employee/tasks");
 }
@@ -77,6 +101,7 @@ const submitUpdateSchema = z.object({
   remainingWork: z.string().optional(),
   clientUpdateSent: z.coerce.boolean(),
   updateSummary: z.string().optional(),
+  timeSpentMinutes: z.coerce.number().int().min(0).optional(),
 });
 
 export type UpdateTaskState = { error?: string; success?: boolean };
@@ -97,28 +122,44 @@ export async function submitTaskUpdate(
     remainingWork: formData.get("remainingWork") || undefined,
     clientUpdateSent: formData.get("clientUpdateSent") === "on",
     updateSummary: formData.get("updateSummary") || undefined,
+    timeSpentMinutes: formData.get("timeSpentMinutes") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const { taskId, status, workResult, remainingWork, clientUpdateSent, updateSummary } =
-    parsed.data;
+  const {
+    taskId,
+    status,
+    workResult,
+    remainingWork,
+    clientUpdateSent,
+    updateSummary,
+    timeSpentMinutes,
+  } = parsed.data;
 
-  const task = await db.query.tasks.findFirst({
-    where: and(eq(tasks.id, taskId), eq(tasks.assignedTo, user.id)),
-  });
+  const [task, existingPending] = await Promise.all([
+    db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.assignedTo, user.id), isNull(tasks.deletedAt)),
+    }),
+    db.query.taskUpdateRequests.findFirst({
+      where: and(
+        eq(taskUpdateRequests.taskId, taskId),
+        eq(taskUpdateRequests.requestStatus, "pending")
+      ),
+    }),
+  ]);
   if (!task) return { error: "Task not found" };
-
-  const existingPending = await db.query.taskUpdateRequests.findFirst({
-    where: and(
-      eq(taskUpdateRequests.taskId, taskId),
-      eq(taskUpdateRequests.requestStatus, "pending")
-    ),
-  });
 
   if (existingPending) {
     await db
       .update(taskUpdateRequests)
-      .set({ requestedStatus: status, workResult, remainingWork, clientUpdateSent, updateSummary })
+      .set({
+        requestedStatus: status,
+        workResult,
+        remainingWork,
+        clientUpdateSent,
+        updateSummary,
+        timeSpentMinutes,
+      })
       .where(eq(taskUpdateRequests.id, existingPending.id));
   } else {
     await db.insert(taskUpdateRequests).values({
@@ -129,8 +170,16 @@ export async function submitTaskUpdate(
       remainingWork,
       clientUpdateSent,
       updateSummary,
+      timeSpentMinutes,
     });
   }
+
+  await notifyAllAdmins({
+    type: "update_submitted",
+    title: `${user.name} submitted an update`,
+    body: `${task.title} — requested status: ${status}`,
+    link: "/admin/approvals",
+  });
 
   revalidatePath("/employee/tasks");
   revalidatePath("/admin/approvals");
@@ -177,10 +226,10 @@ export async function reviewRequest(
         clientUpdateSent: request.clientUpdateSent,
         updateTime: request.clientUpdateSent ? new Date() : undefined,
         updateSummary: request.updateSummary,
-        completionDate:
-          request.requestedStatus === "Completed"
-            ? new Date().toISOString().slice(0, 10)
-            : null,
+        completionDate: request.requestedStatus === "Completed" ? todayLocalISODate() : null,
+        ...(request.timeSpentMinutes
+          ? { timeSpentMinutes: sql`${tasks.timeSpentMinutes} + ${request.timeSpentMinutes}` }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, request.taskId));
@@ -195,6 +244,14 @@ export async function reviewRequest(
       reviewedAt: new Date(),
     })
     .where(eq(taskUpdateRequests.id, requestId));
+
+  await createNotification({
+    userId: request.submittedBy,
+    type: "update_reviewed",
+    title: decision === "approved" ? "Your update was approved" : "Your update was rejected",
+    body: reviewNote || undefined,
+    link: "/employee/tasks",
+  });
 
   revalidatePath("/admin/approvals");
   revalidatePath("/admin/tasks");

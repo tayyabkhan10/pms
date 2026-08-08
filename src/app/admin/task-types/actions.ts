@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { taskTypes } from "@/db/schema";
 import { requireAdmin } from "@/lib/authGuard";
@@ -14,7 +14,6 @@ const nameSchema = z.object({ name: z.string().min(1, "Name is required") });
 
 function revalidate() {
   revalidatePath("/admin/settings");
-  revalidateTag("task-types", "max");
 }
 
 export async function createTaskType(

@@ -92,6 +92,66 @@ async function main() {
     );
   }
 
+  console.log("Seeding platforms...");
+  const platformNames = ["Etsy", "Shopify"] as const;
+  const platformIds: Record<string, string> = {};
+  for (const name of platformNames) {
+    const existing = await db.query.platforms.findFirst({
+      where: eq(schema.platforms.name, name),
+    });
+    if (existing) {
+      platformIds[name] = existing.id;
+      continue;
+    }
+    const [inserted] = await db.insert(schema.platforms).values({ name }).returning();
+    platformIds[name] = inserted.id;
+  }
+  console.log("Platforms ready:", Object.keys(platformIds));
+
+  console.log("Seeding task types...");
+  const taskTypeNames = [
+    "Listing Update",
+    "Order Processing",
+    "Customer Message",
+    "SEO Optimization",
+    "Photo / Image Update",
+  ];
+  for (const name of taskTypeNames) {
+    const existing = await db.query.taskTypes.findFirst({
+      where: eq(schema.taskTypes.name, name),
+    });
+    if (!existing) {
+      await db.insert(schema.taskTypes).values({ name });
+    }
+  }
+  console.log("Task types ready:", taskTypeNames);
+
+  // Named directly in the sheet's legend — flagged isDreamWeaversGroup so Client Master
+  // highlights them, since their ownership/handling is separate from regular clients.
+  console.log("Seeding Dream Weavers group clients...");
+  const dreamWeaversClients = [
+    "Dream Weavers",
+    "Muzamil Munir",
+    "Hadi",
+    "Mehrab",
+    "Nimra Mohsin",
+    "Ghufran",
+    "Azam",
+    "Rabia",
+  ];
+  for (const name of dreamWeaversClients) {
+    const existing = await db.query.clients.findFirst({ where: eq(schema.clients.name, name) });
+    if (!existing) {
+      await db.insert(schema.clients).values({
+        name,
+        platformId: platformIds.Etsy,
+        isDreamWeaversGroup: true,
+        brandGroup: "Dream Weavers",
+      });
+    }
+  }
+  console.log("Dream Weavers clients ready:", dreamWeaversClients);
+
   await client.end();
   console.log("Seed complete.");
 }

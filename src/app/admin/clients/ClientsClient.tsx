@@ -8,7 +8,6 @@ import { deleteClient, createClient, updateClient } from "./actions";
 import { ClientForm } from "./ClientForm";
 
 type Option = { id: string; label: string };
-type TaskRow = { id: string; title: string; statusName: string; assignedDate: string };
 
 type Row = {
   id: string;
@@ -32,13 +31,11 @@ export function ClientsClient({
   platforms,
   bosses,
   employees,
-  tasksByClient,
 }: {
   rows: Row[];
   platforms: Option[];
   bosses: Option[];
   employees: Option[];
-  tasksByClient: Record<string, TaskRow[]>;
 }) {
   const [modal, setModal] = useState<"create" | string | null>(null);
   const editing = rows.find((r) => r.id === modal);
@@ -140,7 +137,7 @@ export function ClientsClient({
             bosses={bosses}
             employees={employees}
             onSuccess={() => setModal(null)}
-            recentTasks={tasksByClient[editing.id] ?? []}
+            showRecentTasks
             defaults={{
               id: editing.id,
               name: editing.name,

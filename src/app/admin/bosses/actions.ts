@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { bosses } from "@/db/schema";
 import { requireAdmin } from "@/lib/authGuard";
@@ -17,8 +17,7 @@ const bossSchema = z.object({
 });
 
 function revalidate() {
-  revalidatePath("/admin/settings", "layout");
-  revalidateTag("bosses", "max");
+  revalidatePath("/admin/settings");
 }
 
 export async function createBoss(

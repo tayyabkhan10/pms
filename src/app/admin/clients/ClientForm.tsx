@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { ActionState } from "./actions";
+import { getRecentTasksForClient } from "./actions";
 import { STATUS_STYLES, type StatusName } from "@/lib/status";
 
 const initialState: ActionState = {};
 
 type Option = { id: string; label: string };
+type RecentTask = { id: string; title: string; statusName: string; assignedDate: string };
 
 export function ClientForm({
   action,
@@ -15,7 +17,7 @@ export function ClientForm({
   employees,
   defaults,
   onSuccess,
-  recentTasks,
+  showRecentTasks,
 }: {
   action: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   platforms: Option[];
@@ -35,13 +37,26 @@ export function ClientForm({
     isActive: boolean;
   };
   onSuccess: () => void;
-  recentTasks?: { id: string; title: string; statusName: string; assignedDate: string }[];
+  showRecentTasks?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(action, initialState);
+  const [recentTasks, setRecentTasks] = useState<RecentTask[] | null>(null);
+  const clientId = defaults?.id;
 
   useEffect(() => {
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
+
+  useEffect(() => {
+    if (!showRecentTasks || !clientId) return;
+    let cancelled = false;
+    getRecentTasksForClient(clientId).then((rows) => {
+      if (!cancelled) setRecentTasks(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showRecentTasks, clientId]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -173,10 +188,12 @@ export function ClientForm({
         {isPending ? "Saving..." : defaults?.id ? "Save Changes" : "Create Client"}
       </button>
 
-      {recentTasks && (
+      {showRecentTasks && (
         <div className="border-t border-zinc-200 pt-4">
           <h3 className="mb-2 text-sm font-semibold text-zinc-900">Recent Tasks</h3>
-          {recentTasks.length === 0 ? (
+          {recentTasks === null ? (
+            <p className="text-sm text-zinc-500">Loading...</p>
+          ) : recentTasks.length === 0 ? (
             <p className="text-sm text-zinc-500">No tasks for this client yet.</p>
           ) : (
             <ul className="space-y-2">

@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { createTask, type ActionState } from "./actions";
+import { todayLocalISODate } from "@/lib/date";
+import { PRIORITIES } from "@/lib/priority";
 
 const initialState: ActionState = {};
 
@@ -31,7 +33,7 @@ export function NewTaskForm({
     if (state.success) onSuccess();
   }, [state.success, onSuccess]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISODate();
 
   return (
     <form action={formAction} className="space-y-4">
@@ -116,6 +118,21 @@ export function NewTaskForm({
           rows={3}
           className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-brand-500"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-zinc-700">Priority</label>
+        <select
+          name="priority"
+          defaultValue="Medium"
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-brand-500"
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -14,12 +14,13 @@ export async function TaskHistoryPanel({
   activePreset?: string;
 }) {
   const tasks = await db.query.tasks.findMany({
-    where: (t, { eq, and, gte, lte }) =>
+    where: (t, { eq, and, gte, lte, isNull }) =>
       and(
         eq(t.assignedTo, userId),
         eq(t.statusName, "Completed"),
         gte(t.completionDate, from),
-        lte(t.completionDate, to)
+        lte(t.completionDate, to),
+        isNull(t.deletedAt)
       ),
     with: {
       client: true,

@@ -6,16 +6,14 @@ import { getCurrentUser } from "@/lib/auth";
 import { AdminSidebar } from "./AdminSidebar";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  const [user, pendingApprovals] = await Promise.all([
+    getCurrentUser(),
+    db.$count(taskUpdateRequests, eq(taskUpdateRequests.requestStatus, "pending")),
+  ]);
 
   if (!user || user.role !== "admin") {
     redirect("/login");
   }
-
-  const pendingApprovals = await db.$count(
-    taskUpdateRequests,
-    eq(taskUpdateRequests.requestStatus, "pending")
-  );
 
   return (
     <div className="flex min-h-screen flex-col bg-white md:flex-row">

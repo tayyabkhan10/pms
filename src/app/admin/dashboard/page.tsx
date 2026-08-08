@@ -1,7 +1,8 @@
-import { and, eq, gte, lte, or } from "drizzle-orm";
+import { and, eq, gte, lte, or, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { STATUSES, STATUS_STYLES, type StatusName } from "@/lib/status";
+import { toLocalISODate, todayLocalISODate } from "@/lib/date";
 import { AutoSubmitForm } from "@/components/AutoSubmitForm";
 import { StatusDonut } from "./StatusDonut";
 import { TrendChart } from "./TrendChart";
@@ -9,7 +10,7 @@ import { TrendChart } from "./TrendChart";
 function daysAgo(n: number) {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 }
 
 export default async function DashboardPage({
@@ -18,40 +19,64 @@ export default async function DashboardPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const { date } = await searchParams;
-  const reportDate = date || new Date().toISOString().slice(0, 10);
+  const reportDate = date || todayLocalISODate();
   const trendStart = daysAgo(6);
 
   const [rows, trendRows] = await Promise.all([
     db.query.tasks.findMany({
-      where: eq(tasks.assignedDate, reportDate),
+      where: and(eq(tasks.assignedDate, reportDate), isNull(tasks.deletedAt)),
       with: { client: true, assignee: true },
       orderBy: (t, { asc }) => [asc(t.statusName)],
     }),
     db.query.tasks.findMany({
-      where: or(
-        and(gte(tasks.assignedDate, trendStart), lte(tasks.assignedDate, reportDate)),
-        and(gte(tasks.completionDate, trendStart), lte(tasks.completionDate, reportDate))
+      where: and(
+        or(
+          and(gte(tasks.assignedDate, trendStart), lte(tasks.assignedDate, reportDate)),
+          and(gte(tasks.completionDate, trendStart), lte(tasks.completionDate, reportDate))
+        ),
+        isNull(tasks.deletedAt)
       ),
       columns: { assignedDate: true, completionDate: true },
     }),
   ]);
 
-  const pending = rows.filter((r) => r.statusName !== "Completed");
-  const completed = rows.filter((r) => r.statusName === "Completed");
-  const blocked = rows.filter((r) => r.statusName === "Blocked");
-  const updateNotSent = rows.filter((r) => !r.clientUpdateSent && r.statusName !== "Not Started");
+  const pending: TaskRow[] = [];
+  const completed: TaskRow[] = [];
+  const blocked: TaskRow[] = [];
+  const updateNotSent: TaskRow[] = [];
+  const statusCountMap = new Map<string, number>(STATUSES.map((name) => [name, 0]));
 
-  const statusCounts = STATUSES.map((name) => ({
-    name,
-    value: rows.filter((r) => r.statusName === name).length,
-  }));
+  for (const r of rows) {
+    if (r.statusName !== "Completed") pending.push(r);
+    if (r.statusName === "Completed") completed.push(r);
+    if (r.statusName === "Blocked") blocked.push(r);
+    if (!r.clientUpdateSent && r.statusName !== "Not Started") updateNotSent.push(r);
+    statusCountMap.set(r.statusName, (statusCountMap.get(r.statusName) ?? 0) + 1);
+  }
+
+  const statusCounts = STATUSES.map((name) => ({ name, value: statusCountMap.get(name) ?? 0 }));
+
+  const trendCounts = new Map<string, { assigned: number; completed: number }>();
+  for (const r of trendRows) {
+    if (r.assignedDate) {
+      const bucket = trendCounts.get(r.assignedDate) ?? { assigned: 0, completed: 0 };
+      bucket.assigned += 1;
+      trendCounts.set(r.assignedDate, bucket);
+    }
+    if (r.completionDate) {
+      const bucket = trendCounts.get(r.completionDate) ?? { assigned: 0, completed: 0 };
+      bucket.completed += 1;
+      trendCounts.set(r.completionDate, bucket);
+    }
+  }
 
   const trendData = Array.from({ length: 7 }).map((_, i) => {
     const day = daysAgo(6 - i);
+    const bucket = trendCounts.get(day);
     return {
       day: day.slice(5), // MM-DD
-      Assigned: trendRows.filter((r) => r.assignedDate === day).length,
-      Completed: trendRows.filter((r) => r.completionDate === day).length,
+      Assigned: bucket?.assigned ?? 0,
+      Completed: bucket?.completed ?? 0,
     };
   });
 

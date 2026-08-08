@@ -1,3 +1,5 @@
+import { toLocalISODate } from "@/lib/date";
+
 // Given any date, returns the Monday–Sunday week it falls in (YYYY-MM-DD strings), matching
 // the sheet's "poori week Monday se Sunday tak" planning convention.
 export function getWeekRange(dateStr: string) {
@@ -12,7 +14,7 @@ export function getWeekRange(dateStr: string) {
   sunday.setDate(monday.getDate() + 6);
 
   return {
-    weekStartDate: monday.toISOString().slice(0, 10),
-    weekEndDate: sunday.toISOString().slice(0, 10),
+    weekStartDate: toLocalISODate(monday),
+    weekEndDate: toLocalISODate(sunday),
   };
 }

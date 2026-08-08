@@ -3,6 +3,8 @@
 import { useActionState, useEffect, useState } from "react";
 import { submitTaskUpdate, type UpdateTaskState } from "@/app/admin/tasks/actions";
 import { STATUSES, STATUS_STYLES, isOverdue } from "@/lib/status";
+import { PRIORITY_STYLES, type PriorityName } from "@/lib/priority";
+import { FileAttachments } from "@/components/FileAttachments";
 
 const initialState: UpdateTaskState = {};
 
@@ -12,6 +14,8 @@ type Task = {
   title: string;
   description: string | null;
   statusName: string;
+  priority: string;
+  timeSpentMinutes: number;
   workResult: string | null;
   remainingWork: string | null;
   clientUpdateSent: boolean;
@@ -68,6 +72,11 @@ export function TaskUpdateRow({ task, latestRequest }: { task: Task; latestReque
         </div>
         <div className="flex items-center gap-3">
           <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[task.priority as PriorityName] ?? "bg-zinc-100 text-zinc-600"}`}
+          >
+            {task.priority}
+          </span>
+          <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[task.statusName as keyof typeof STATUS_STYLES] ?? "bg-zinc-100 text-zinc-600"}`}
           >
             {task.statusName}
@@ -89,6 +98,14 @@ export function TaskUpdateRow({ task, latestRequest }: { task: Task; latestReque
           <span className="font-medium text-zinc-700">Remaining:</span> {task.remainingWork}
         </p>
       )}
+
+      {task.timeSpentMinutes > 0 && (
+        <p className="mt-1 text-xs text-zinc-400">
+          Time logged: {Math.floor(task.timeSpentMinutes / 60)}h {task.timeSpentMinutes % 60}m
+        </p>
+      )}
+
+      <FileAttachments taskId={task.id} className="mt-3" />
 
       {isPendingApproval && (
         <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -140,6 +157,19 @@ export function TaskUpdateRow({ task, latestRequest }: { task: Task; latestReque
               defaultValue={draft?.remainingWork ?? task.remainingWork ?? ""}
               rows={2}
               placeholder="What's left to do..."
+              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-brand-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700">
+              Time Spent (minutes)
+            </label>
+            <input
+              type="number"
+              name="timeSpentMinutes"
+              min={0}
+              placeholder="e.g. 90"
               className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-brand-500"
             />
           </div>

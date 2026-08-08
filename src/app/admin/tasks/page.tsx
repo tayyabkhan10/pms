@@ -1,27 +1,48 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { getEmployeeOptions, getTaskTypeOptions } from "@/lib/options";
 import { STATUSES, STATUS_STYLES, isOverdue } from "@/lib/status";
+import { PRIORITIES, PRIORITY_STYLES, type PriorityName } from "@/lib/priority";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { AutoSubmitForm } from "@/components/AutoSubmitForm";
+import { Pagination } from "@/components/Pagination";
 import { deleteTask } from "./actions";
 import { AssignTaskButton } from "./AssignTaskButton";
+
+const PAGE_SIZE = 50;
 
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ employee?: string; status?: string }>;
+  searchParams: Promise<{ employee?: string; status?: string; priority?: string; page?: string }>;
 }) {
-  const { employee, status } = await searchParams;
-  const [employees, taskTypes, clientRows] = await Promise.all([
+  const { employee, status, priority, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+
+  const conditions = [isNull(tasks.deletedAt)];
+  if (employee) conditions.push(eq(tasks.assignedTo, employee));
+  if (status) conditions.push(eq(tasks.statusName, status));
+  if (priority) conditions.push(eq(tasks.priority, priority));
+  const where = and(...conditions);
+
+  const [employees, taskTypes, clientRows, rows, total] = await Promise.all([
     getEmployeeOptions(),
     getTaskTypeOptions(),
     db.query.clients.findMany({
-      where: (clients, { eq }) => eq(clients.isActive, true),
+      where: (clients, { eq, and, isNull }) =>
+        and(eq(clients.isActive, true), isNull(clients.deletedAt)),
       with: { platform: true },
       orderBy: (clients, { asc }) => [asc(clients.name)],
     }),
+    db.query.tasks.findMany({
+      where,
+      with: { client: true, assignee: true, taskType: true },
+      orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    }),
+    db.$count(tasks, where),
   ]);
   const clientOptions = clientRows.map((c) => ({
     id: c.id,
@@ -29,22 +50,21 @@ export default async function TasksPage({
     platformName: c.platform.name,
     brandGroup: c.brandGroup,
   }));
-
-  const conditions = [];
-  if (employee) conditions.push(eq(tasks.assignedTo, employee));
-  if (status) conditions.push(eq(tasks.statusName, status));
-
-  const rows = await db.query.tasks.findMany({
-    where: conditions.length ? and(...conditions) : undefined,
-    with: { client: true, assignee: true, taskType: true },
-    orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
-  });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Daily Task Board</h1>
-        <AssignTaskButton clients={clientOptions} employees={employees} taskTypes={taskTypes} />
+        <div className="flex items-center gap-2">
+          <a
+            href={`/admin/tasks/export?${new URLSearchParams({ ...(employee && { employee }), ...(status && { status }), ...(priority && { priority }) }).toString()}`}
+            className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Export CSV
+          </a>
+          <AssignTaskButton clients={clientOptions} employees={employees} taskTypes={taskTypes} />
+        </div>
       </div>
 
       <AutoSubmitForm className="mt-4 flex flex-wrap gap-3 text-sm">
@@ -72,6 +92,18 @@ export default async function TasksPage({
             </option>
           ))}
         </select>
+        <select
+          name="priority"
+          defaultValue={priority ?? ""}
+          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
+        >
+          <option value="">All priorities</option>
+          {PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
       </AutoSubmitForm>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-200 shadow-sm">
@@ -94,6 +126,9 @@ export default async function TasksPage({
                 Deadline
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">
+                Priority
+              </th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">
                 Status
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">
@@ -107,7 +142,7 @@ export default async function TasksPage({
           <tbody className="divide-y divide-zinc-200 bg-white">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-zinc-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-zinc-500">
                   No tasks yet.
                 </td>
               </tr>
@@ -134,6 +169,13 @@ export default async function TasksPage({
                   </td>
                   <td className="px-4 py-2 text-sm">
                     <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[row.priority as PriorityName] ?? "bg-zinc-100 text-zinc-600"}`}
+                    >
+                      {row.priority}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-sm">
+                    <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[row.statusName as keyof typeof STATUS_STYLES] ?? "bg-zinc-100 text-zinc-600"}`}
                     >
                       {row.statusName}
@@ -157,6 +199,7 @@ export default async function TasksPage({
           </tbody>
         </table>
       </div>
+      <Pagination page={page} totalPages={totalPages} searchParams={{ employee, status, priority }} />
     </div>
   );
 }

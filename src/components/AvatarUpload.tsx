@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Camera, Trash2, Loader2 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { saveAvatarUrl, removeAvatar } from "@/app/avatar-actions";
@@ -14,12 +14,27 @@ export function AvatarUpload({ name, url }: { name: string; url: string | null }
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const configured = Boolean(CLOUD_NAME && UPLOAD_PRESET);
 
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
+
   async function handleFile(file: File) {
     setError(null);
+
+    // Instant local preview so the user sees the picked image right away, before the
+    // Cloudinary round-trip finishes — separate from `url`, which only updates on success.
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const localPreview = URL.createObjectURL(file);
+    objectUrlRef.current = localPreview;
+    setPreview(localPreview);
     setUploading(true);
+
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -29,13 +44,17 @@ export function AvatarUpload({ name, url }: { name: string; url: string | null }
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message || "Upload failed");
+      }
 
       setPreview(data.secure_url);
       startTransition(() => saveAvatarUrl(data.secure_url));
-    } catch {
-      setError("Upload failed. Please try again.");
+    } catch (err) {
+      setPreview(url);
+      setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -69,6 +88,7 @@ export function AvatarUpload({ name, url }: { name: string; url: string | null }
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleFile(file);
+                e.target.value = "";
               }}
             />
             {preview && (
@@ -78,13 +98,13 @@ export function AvatarUpload({ name, url }: { name: string; url: string | null }
                   setPreview(null);
                   startTransition(() => removeAvatar());
                 }}
-                disabled={isPending}
+                disabled={isPending || uploading}
                 className="flex items-center gap-1 text-sm text-red-600 hover:underline disabled:opacity-60"
               >
                 <Trash2 size={14} /> Remove photo
               </button>
             )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="mt-1 max-w-xs text-sm text-red-600">{error}</p>}
           </>
         ) : (
           <p className="max-w-xs text-xs text-zinc-400">

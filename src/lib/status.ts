@@ -1,3 +1,5 @@
+import { todayLocalISODate } from "@/lib/date";
+
 export const STATUSES = [
   "Not Started",
   "In Progress",
@@ -29,5 +31,6 @@ export const STATUS_CHART_COLORS: Record<StatusName, string> = {
 
 export function isOverdue(dueDate: string | null, status: string, completionDate: string | null) {
   if (!dueDate || completionDate || status === "Completed") return false;
-  return new Date(dueDate) < new Date(new Date().toDateString());
+  // Plain YYYY-MM-DD string comparison — avoids mixing UTC-parsed and local-parsed Date objects.
+  return dueDate < todayLocalISODate();
 }

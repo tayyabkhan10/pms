@@ -1,4 +1,4 @@
-import { and, gte, lte } from "drizzle-orm";
+import { and, gte, lte, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { resolveDateRange } from "@/lib/dateRange";
@@ -13,13 +13,14 @@ export default async function WorkloadPage({
   const { from, to, preset } = resolveDateRange(params);
 
   const rows = await db.query.tasks.findMany({
-    where: and(gte(tasks.assignedDate, from), lte(tasks.assignedDate, to)),
-    with: { assignee: true },
+    where: and(gte(tasks.assignedDate, from), lte(tasks.assignedDate, to), isNull(tasks.deletedAt)),
+    columns: { statusName: true, clientUpdateSent: true, timeSpentMinutes: true },
+    with: { assignee: { columns: { id: true, name: true } } },
   });
 
   const byEmployee = new Map<
     string,
-    { name: string; total: number; completed: number; pendingUpdates: number }
+    { name: string; total: number; completed: number; pendingUpdates: number; minutes: number }
   >();
 
   for (const row of rows) {
@@ -29,10 +30,12 @@ export default async function WorkloadPage({
       total: 0,
       completed: 0,
       pendingUpdates: 0,
+      minutes: 0,
     };
     entry.total += 1;
     if (row.statusName === "Completed") entry.completed += 1;
     if (!row.clientUpdateSent) entry.pendingUpdates += 1;
+    entry.minutes += row.timeSpentMinutes;
     byEmployee.set(key, entry);
   }
 
@@ -40,10 +43,20 @@ export default async function WorkloadPage({
 
   return (
     <div>
-      <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Employee Workload</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Task completion and pending-update counts for a date range.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Employee Workload</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Task completion and pending-update counts for a date range.
+          </p>
+        </div>
+        <a
+          href={`/admin/workload/export?${new URLSearchParams({ ...(preset && { preset }), from, to }).toString()}`}
+          className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+        >
+          Export CSV
+        </a>
+      </div>
 
       <div className="mt-4">
         <DateRangeFilter activePreset={preset} from={from} to={to} />
@@ -65,12 +78,15 @@ export default async function WorkloadPage({
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">
                 Pending Updates
               </th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">
+                Time Logged
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 bg-white">
             {summary.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-zinc-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-500">
                   No tasks in this range.
                 </td>
               </tr>
@@ -81,6 +97,9 @@ export default async function WorkloadPage({
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.total}</td>
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.completed}</td>
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.pendingUpdates}</td>
+                <td className="px-4 py-2 text-sm text-zinc-600">
+                  {Math.floor(row.minutes / 60)}h {row.minutes % 60}m
+                </td>
               </tr>
             ))}
           </tbody>

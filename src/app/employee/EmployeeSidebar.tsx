@@ -7,6 +7,8 @@ import { ClipboardList, CalendarDays, UserRound, Menu, X } from "lucide-react";
 import { logout } from "@/app/logout/actions";
 import { Avatar } from "@/components/Avatar";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const NAV = [
   { href: "/employee/tasks", label: "My Tasks", icon: ClipboardList },
@@ -40,6 +42,10 @@ export function EmployeeSidebar({
         >
           <X size={18} />
         </button>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-2">
+        <ThemeToggle />
+        <NotificationBell />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4 text-sm">
         {NAV.map((item) => (

@@ -7,6 +7,7 @@ export function Logo({ size = 32 }: { size?: number }) {
       alt="Dream Weavers"
       width={size}
       height={size}
+      style={{ width: size, height: size }}
       className="shrink-0 rounded-md object-contain"
       priority
     />

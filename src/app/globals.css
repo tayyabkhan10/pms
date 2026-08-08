@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
+/* Manual toggle (class on <html>) rather than only prefers-color-scheme, so the ThemeToggle
+   button and the no-flash inline script (see layout.tsx) control it directly. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #18181b;
+}
+
+:root.dark {
+  --background: #000000;
+  --foreground: #f4f4f5;
 }
 
 @theme inline {
@@ -27,8 +36,38 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 h1, h2, h3, h4 {
   letter-spacing: -0.01em;
+}
+
+/* Dark-mode overrides for the light-themed utility classes used throughout the existing
+   markup (cards, tables, forms, sidebars). Written unlayered (outside @theme/@layer), these
+   win over Tailwind's own generated utilities regardless of specificity — so dark mode works
+   app-wide from one place instead of adding `dark:` variants to every one of the ~80 files
+   that use `bg-white`/`text-zinc-*`/`border-zinc-*`. */
+.dark .bg-white { background-color: #0a0a0a; }
+.dark .bg-zinc-50 { background-color: #0d0d0d; }
+.dark .bg-zinc-100 { background-color: #161616; }
+.dark .border-zinc-100 { border-color: #1f1f1f; }
+.dark .border-zinc-200 { border-color: #1f1f1f; }
+.dark .border-zinc-300 { border-color: #2b2b2b; }
+.dark .divide-zinc-200 > :not([hidden]) ~ :not([hidden]) { border-color: #1f1f1f; }
+.dark .text-zinc-900 { color: #f4f4f5; }
+.dark .text-zinc-800 { color: #e4e4e7; }
+.dark .text-zinc-700 { color: #d4d4d8; }
+.dark .text-zinc-600 { color: #a1a1aa; }
+.dark .text-zinc-500 { color: #a1a1aa; }
+.dark .text-zinc-400 { color: #71717a; }
+.dark .text-zinc-300 { color: #52525b; }
+.dark .hover\:bg-zinc-50:hover { background-color: #161616; }
+.dark .hover\:bg-zinc-100:hover { background-color: #1f1f1f; }
+.dark .hover\:text-zinc-600:hover { color: #d4d4d8; }
+.dark .hover\:text-zinc-700:hover { color: #e4e4e7; }
+.dark .hover\:text-zinc-900:hover { color: #f4f4f5; }
+.dark ::placeholder { color: #71717a; }
+.dark .shadow-sm, .dark .shadow, .dark .shadow-md, .dark .shadow-lg {
+  --tw-shadow-color: rgb(0 0 0 / 0.6);
 }

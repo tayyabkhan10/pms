@@ -16,8 +16,12 @@ export default async function EmployeeTasksPage({
 
   const rows = user
     ? await db.query.tasks.findMany({
-        where: (tasks, { eq, and, ne }) =>
-          and(eq(tasks.assignedTo, user.id), ne(tasks.statusName, "Completed")),
+        where: (tasks, { eq, and, ne, isNull }) =>
+          and(
+            eq(tasks.assignedTo, user.id),
+            ne(tasks.statusName, "Completed"),
+            isNull(tasks.deletedAt)
+          ),
         with: {
           client: true,
           taskType: true,

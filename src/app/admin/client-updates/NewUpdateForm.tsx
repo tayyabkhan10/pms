@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { createClientUpdate, type ActionState } from "./actions";
+import { todayLocalISODate } from "@/lib/date";
 
 const initialState: ActionState = {};
 
@@ -16,7 +17,7 @@ export function NewUpdateForm({
 }) {
   const [state, formAction, isPending] = useActionState(createClientUpdate, initialState);
   const formRef = useRef<HTMLFormElement>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISODate();
 
   useEffect(() => {
     if (state.success) formRef.current?.reset();

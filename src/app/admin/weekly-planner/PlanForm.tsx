@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from "react";
 import { saveWeeklyPlan, type ActionState } from "./actions";
 import { getWeekRange } from "@/lib/week";
+import { todayLocalISODate } from "@/lib/date";
 
 const initialState: ActionState = {};
 
@@ -18,7 +19,7 @@ export function PlanForm({
   onSuccess: () => void;
 }) {
   const [state, formAction, isPending] = useActionState(saveWeeklyPlan, initialState);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISODate();
   const weekOf = defaults?.weekOf ?? today;
   const { weekStartDate, weekEndDate } = getWeekRange(weekOf);
 

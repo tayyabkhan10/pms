@@ -41,8 +41,13 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     return { error: "This account is inactive" };
   }
 
+  const role = data.user.app_metadata?.role as "admin" | "employee" | undefined;
+  if (role !== "admin" && role !== "employee") {
+    await supabase.auth.signOut();
+    return { error: "This account is not configured correctly. Contact an administrator." };
+  }
+
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, data.user.id));
 
-  const role = data.user.app_metadata?.role as "admin" | "employee" | undefined;
   redirect(role === "admin" ? "/admin" : "/employee");
 }

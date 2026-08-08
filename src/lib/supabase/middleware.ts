@@ -44,7 +44,18 @@ export async function updateSession(request: NextRequest) {
   // and the seed script) so middleware can authorize routes from the JWT alone, no DB round trip.
   const role = user?.app_metadata?.role as "admin" | "employee" | undefined;
 
-  if (user && isPublicPath) {
+  // A signed-in user whose token carries no recognized role can't be routed anywhere safely —
+  // without this, /admin and /employee redirect to each other forever (both branches below
+  // treat "not my role" as "go to the other one"). Sign them out and send to login instead of
+  // guessing, so the loop terminates and they can get a fresh, correctly-stamped session.
+  if (user && role !== "admin" && role !== "employee" && pathname !== "/login") {
+    await supabase.auth.signOut();
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && isPublicPath && role) {
     const url = request.nextUrl.clone();
     url.pathname = role === "admin" ? "/admin" : "/employee";
     return NextResponse.redirect(url);
