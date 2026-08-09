@@ -5,6 +5,12 @@ import { taskUpdateRequests } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { AdminSidebar } from "./AdminSidebar";
 
+// Every /admin/* page needs the signed-in admin's session and live DB data — never static.
+// Without this, Next's build occasionally tries to prerender a page here at build time
+// (e.g. /admin/settings), where it has no request/cookies and the DB connection attempt can
+// hang until the build times out and fails the deployment.
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [user, pendingApprovals] = await Promise.all([
     getCurrentUser(),

@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { EmployeeSidebar } from "./EmployeeSidebar";
 
+// Same reasoning as src/app/admin/layout.tsx — every /employee/* page is per-session and
+// must never be statically prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
 
