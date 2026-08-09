@@ -1,10 +1,16 @@
-import { and, gte, lte } from "drizzle-orm";
-import { db } from "@/db";
-import { taskUpdateRequests } from "@/db/schema";
+"use client";
+
+import { useEffect, useState } from "react";
 import { STATUS_STYLES, type StatusName } from "@/lib/status";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
+import { getApprovalHistory } from "./history-actions";
 
-export async function HistoryPanel({
+type HistoryRow = Awaited<ReturnType<typeof getApprovalHistory>>[number];
+
+// A client component (not an async Server Component) on purpose: this only mounts once the
+// admin actually switches to the History tab (see ApprovalsTabs), so the query behind it never
+// runs on a page load where nobody looks at History — it used to, every time, unconditionally.
+export function HistoryPanel({
   from,
   to,
   activePreset,
@@ -13,21 +19,28 @@ export async function HistoryPanel({
   to: string;
   activePreset?: string;
 }) {
-  const requests = await db.query.taskUpdateRequests.findMany({
-    where: and(
-      gte(taskUpdateRequests.reviewedAt, new Date(`${from}T00:00:00`)),
-      lte(taskUpdateRequests.reviewedAt, new Date(`${to}T23:59:59.999`))
-    ),
-    with: { task: true, submitter: true, reviewer: true },
-    orderBy: (r, { desc }) => [desc(r.reviewedAt)],
-    limit: 200,
-  });
+  const [requests, setRequests] = useState<HistoryRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRequests(null);
+    getApprovalHistory(from, to).then((rows) => {
+      if (!cancelled) setRequests(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to]);
 
   return (
     <div>
       <DateRangeFilter activePreset={activePreset} from={from} to={to} />
 
-      {requests.length === 0 ? (
+      {requests === null ? (
+        <div className="mt-4 rounded-lg border border-dashed border-zinc-300 p-10 text-center">
+          <p className="text-sm text-zinc-500">Loading...</p>
+        </div>
+      ) : requests.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-zinc-300 p-10 text-center">
           <p className="text-sm text-zinc-500">No reviewed requests in this range.</p>
         </div>

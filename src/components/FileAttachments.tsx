@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Paperclip, X, Loader2, Upload } from "lucide-react";
 import { addAttachment, deleteAttachment, getAttachments } from "@/app/actions/attachments";
 
@@ -14,6 +14,9 @@ type Attachment = {
   fileType: string | null;
 };
 
+// No query runs just from rendering this component — existing attachments are only fetched
+// if the user explicitly asks to see them ("Show attachments"), and a fresh upload appends
+// the row addAttachment already returns instead of re-fetching the list.
 export function FileAttachments({
   taskId,
   clientUpdateId,
@@ -23,20 +26,20 @@ export function FileAttachments({
   clientUpdateId?: string;
   className?: string;
 }) {
-  const [items, setItems] = useState<Attachment[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [items, setItems] = useState<Attachment[] | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const configured = Boolean(CLOUD_NAME && UPLOAD_PRESET);
 
-  useEffect(() => {
-    getAttachments({ taskId, clientUpdateId }).then((rows) => {
-      setItems(rows);
-      setLoaded(true);
-    });
-  }, [taskId, clientUpdateId]);
+  async function showAttachments() {
+    setListLoading(true);
+    const rows = await getAttachments({ taskId, clientUpdateId });
+    setItems(rows);
+    setListLoading(false);
+  }
 
   async function handleFile(file: File) {
     setError(null);
@@ -53,15 +56,15 @@ export function FileAttachments({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || "Upload failed");
 
-      await addAttachment({
+      const row = await addAttachment({
         taskId,
         clientUpdateId,
         fileUrl: data.secure_url,
         fileName: file.name,
         fileType: file.type,
       });
-      const rows = await getAttachments({ taskId, clientUpdateId });
-      setItems(rows);
+      // Show the list (with the new file already in it) without a separate fetch.
+      setItems((prev) => [row, ...(prev ?? [])]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
@@ -69,15 +72,23 @@ export function FileAttachments({
     }
   }
 
-  if (!loaded) return null;
-
   return (
     <div className={className}>
       <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
         <Paperclip size={12} /> Attachments
+        {items === null && (
+          <button
+            type="button"
+            onClick={showAttachments}
+            disabled={listLoading}
+            className="font-normal text-brand-600 hover:underline disabled:opacity-50"
+          >
+            {listLoading ? "Loading..." : "Show attachments"}
+          </button>
+        )}
       </div>
 
-      {items.length > 0 && (
+      {items !== null && items.length > 0 && (
         <ul className="mt-1.5 space-y-1">
           {items.map((a) => (
             <li key={a.id} className="flex items-center gap-2 text-sm">
@@ -93,7 +104,7 @@ export function FileAttachments({
                 type="button"
                 onClick={() => startTransition(async () => {
                   await deleteAttachment(a.id);
-                  setItems((prev) => prev.filter((x) => x.id !== a.id));
+                  setItems((prev) => (prev ?? []).filter((x) => x.id !== a.id));
                 })}
                 disabled={isPending}
                 className="text-zinc-400 hover:text-red-600 disabled:opacity-50"

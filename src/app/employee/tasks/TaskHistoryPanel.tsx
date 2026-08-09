@@ -1,41 +1,47 @@
-import { db } from "@/db";
+"use client";
+
+import { useEffect, useState } from "react";
 import { STATUS_STYLES, type StatusName } from "@/lib/status";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
+import { getMyTaskHistory } from "./history-actions";
 
-export async function TaskHistoryPanel({
-  userId,
+type HistoryTask = Awaited<ReturnType<typeof getMyTaskHistory>>[number];
+
+// Client component on purpose — mounts (and only then queries) once the employee actually
+// switches to the History tab (see EmployeeTasksTabs). Previously this was an async Server
+// Component constructed unconditionally by the page, so the query ran on every "My Tasks"
+// page load whether or not History was ever opened.
+export function TaskHistoryPanel({
   from,
   to,
   activePreset,
 }: {
-  userId: string;
   from: string;
   to: string;
   activePreset?: string;
 }) {
-  const tasks = await db.query.tasks.findMany({
-    where: (t, { eq, and, gte, lte, isNull }) =>
-      and(
-        eq(t.assignedTo, userId),
-        eq(t.statusName, "Completed"),
-        gte(t.completionDate, from),
-        lte(t.completionDate, to),
-        isNull(t.deletedAt)
-      ),
-    with: {
-      client: true,
-      taskType: true,
-      updateRequests: { orderBy: (r, { desc }) => [desc(r.createdAt)] },
-    },
-    orderBy: (t, { desc }) => [desc(t.completionDate)],
-    limit: 100,
-  });
+  const [tasks, setTasks] = useState<HistoryTask[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTasks(null);
+    getMyTaskHistory(from, to).then((rows) => {
+      if (!cancelled) setTasks(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to]);
 
   return (
     <div>
       <DateRangeFilter activePreset={activePreset} from={from} to={to} />
 
-      {tasks.length === 0 ? (
+      {tasks === null ? (
+        <div className="mt-4 rounded-lg border border-dashed border-zinc-300 p-10 text-center">
+          <p className="text-sm text-zinc-500">Loading...</p>
+        </div>
+      ) : tasks.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-zinc-300 p-10 text-center">
           <p className="text-sm text-zinc-500">No completed tasks in this range.</p>
         </div>

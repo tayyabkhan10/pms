@@ -66,18 +66,25 @@ export async function addAttachment(opts: {
     throw new Error("taskId or clientUpdateId is required");
   }
 
-  await db.insert(attachments).values({
-    taskId: opts.taskId,
-    clientUpdateId: opts.clientUpdateId,
-    fileUrl: opts.fileUrl,
-    fileName: opts.fileName,
-    fileType: opts.fileType,
-    uploadedBy: user.id,
-  });
+  // Returns the created row so the client can append it directly instead of re-fetching the
+  // whole list right after inserting into it.
+  const [row] = await db
+    .insert(attachments)
+    .values({
+      taskId: opts.taskId,
+      clientUpdateId: opts.clientUpdateId,
+      fileUrl: opts.fileUrl,
+      fileName: opts.fileName,
+      fileType: opts.fileType,
+      uploadedBy: user.id,
+    })
+    .returning();
 
   revalidatePath("/admin/tasks");
   revalidatePath("/employee/tasks");
   revalidatePath("/admin/client-updates");
+
+  return row;
 }
 
 export async function deleteAttachment(id: string) {

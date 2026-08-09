@@ -49,5 +49,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
 
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, data.user.id));
 
-  redirect(role === "admin" ? "/admin" : "/employee");
+  // Straight to the real landing page — /admin and /employee are themselves just a redirect
+  // to these, so going through them here would mean two redirect round trips after every login.
+  redirect(role === "admin" ? "/admin/dashboard" : "/employee/tasks");
 }

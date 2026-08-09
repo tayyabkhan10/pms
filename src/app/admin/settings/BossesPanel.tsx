@@ -1,12 +1,19 @@
-import { db } from "@/db";
+"use client";
+
+import { useEffect, useState } from "react";
 import { NewBossForm } from "@/app/admin/bosses/NewBossForm";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deleteBoss } from "@/app/admin/bosses/actions";
+import { getBossesList } from "./actions";
 
-export async function BossesPanel() {
-  const rows = await db.query.bosses.findMany({
-    orderBy: (bosses, { asc }) => [asc(bosses.name)],
-  });
+type Row = Awaited<ReturnType<typeof getBossesList>>[number];
+
+export function BossesPanel() {
+  const [rows, setRows] = useState<Row[] | null>(null);
+
+  useEffect(() => {
+    getBossesList().then(setRows);
+  }, []);
 
   return (
     <div className="max-w-3xl">
@@ -25,14 +32,21 @@ export async function BossesPanel() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 bg-white">
-            {rows.length === 0 && (
+            {rows === null && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500">
+                  Loading...
+                </td>
+              </tr>
+            )}
+            {rows?.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500">
                   No bosses yet.
                 </td>
               </tr>
             )}
-            {rows.map((row) => (
+            {rows?.map((row) => (
               <tr key={row.id}>
                 <td className="px-4 py-2 text-sm text-zinc-900">{row.name}</td>
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.email ?? "—"}</td>

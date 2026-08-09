@@ -57,19 +57,19 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isPublicPath && role) {
     const url = request.nextUrl.clone();
-    url.pathname = role === "admin" ? "/admin" : "/employee";
+    url.pathname = role === "admin" ? "/admin/dashboard" : "/employee/tasks";
     return NextResponse.redirect(url);
   }
 
   if (user && pathname.startsWith("/admin") && role !== "admin") {
     const url = request.nextUrl.clone();
-    url.pathname = "/employee";
+    url.pathname = "/employee/tasks";
     return NextResponse.redirect(url);
   }
 
   if (user && pathname.startsWith("/employee") && role !== "employee") {
     const url = request.nextUrl.clone();
-    url.pathname = "/admin";
+    url.pathname = "/admin/dashboard";
     return NextResponse.redirect(url);
   }
 

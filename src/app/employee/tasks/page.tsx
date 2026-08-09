@@ -49,9 +49,7 @@ export default async function EmployeeTasksPage({
       activeCount={rows.length}
       activePanel={activePanel}
       historyPanel={
-        user ? (
-          <TaskHistoryPanel userId={user.id} from={from} to={to} activePreset={preset} />
-        ) : null
+        user ? <TaskHistoryPanel from={from} to={to} activePreset={preset} /> : null
       }
     />
   );

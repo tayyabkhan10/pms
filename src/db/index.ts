@@ -20,7 +20,12 @@ const client =
   globalForDb.postgresClient ??
   postgres(process.env.DATABASE_URL, {
     prepare: false,
-    max: 2,
+    // Was 2 — too easy for a single concurrent request (e.g. one notification poll, which
+    // itself no longer runs 2 queries in parallel, but other pages still do via Promise.all)
+    // to occupy the whole pool and make every other request — including login — queue behind
+    // it. Still conservative enough to stay well under Supabase's shared pooler limit even
+    // multiplied across Next's worker processes.
+    max: 5,
     connect_timeout: 10,
     // Supabase's transaction pooler can silently drop idle backend connections without
     // closing the socket cleanly, which otherwise leaves postgres.js hanging on the next

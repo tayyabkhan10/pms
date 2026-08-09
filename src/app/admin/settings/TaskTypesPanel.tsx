@@ -1,12 +1,19 @@
-import { db } from "@/db";
+"use client";
+
+import { useEffect, useState } from "react";
 import { NewTaskTypeForm } from "@/app/admin/task-types/NewTaskTypeForm";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deleteTaskType } from "@/app/admin/task-types/actions";
+import { getTaskTypesList } from "./actions";
 
-export async function TaskTypesPanel() {
-  const rows = await db.query.taskTypes.findMany({
-    orderBy: (taskTypes, { asc }) => [asc(taskTypes.name)],
-  });
+type Row = Awaited<ReturnType<typeof getTaskTypesList>>[number];
+
+export function TaskTypesPanel() {
+  const [rows, setRows] = useState<Row[] | null>(null);
+
+  useEffect(() => {
+    getTaskTypesList().then(setRows);
+  }, []);
 
   return (
     <div className="max-w-lg">
@@ -17,12 +24,17 @@ export async function TaskTypesPanel() {
       <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 shadow-sm">
         <table className="min-w-full divide-y divide-zinc-200">
           <tbody className="divide-y divide-zinc-200 bg-white">
-            {rows.length === 0 && (
+            {rows === null && (
+              <tr>
+                <td className="px-4 py-6 text-center text-sm text-zinc-500">Loading...</td>
+              </tr>
+            )}
+            {rows?.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-center text-sm text-zinc-500">No task types yet.</td>
               </tr>
             )}
-            {rows.map((row) => (
+            {rows?.map((row) => (
               <tr key={row.id}>
                 <td className="px-4 py-2 text-sm text-zinc-900">{row.name}</td>
                 <td className="px-4 py-2 text-right">

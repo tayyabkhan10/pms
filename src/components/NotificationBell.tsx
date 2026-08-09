@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, RefreshCw } from "lucide-react";
 import {
   getMyNotifications,
   markAllNotificationsRead,
@@ -20,13 +20,19 @@ type Notification = {
   createdAt: Date;
 };
 
-const POLL_MS = 30000;
+// Deliberately infrequent and manual-first: this used to poll every 30s from every open tab
+// and was starving the (small) DB connection pool of connections other requests needed — see
+// src/db/index.ts. Now it's a single fetch on mount, a slow 10-minute background refresh as a
+// fallback, and a manual refresh button for anyone who wants it sooner. No polling at all while
+// the tab is in the background.
+const POLL_MS = 10 * 60 * 1000;
 const DROPDOWN_WIDTH = 320;
 
 export function NotificationBell() {
   const [items, setItems] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -38,11 +44,36 @@ export function NotificationBell() {
     setUnreadCount(data.unreadCount);
   }
 
+  async function manualRefresh() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
+
   useEffect(() => {
     setMounted(true);
     refresh();
-    const interval = setInterval(refresh, POLL_MS);
-    return () => clearInterval(interval);
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+    function startPolling() {
+      if (interval || document.hidden) return;
+      interval = setInterval(refresh, POLL_MS);
+    }
+    function stopPolling() {
+      if (interval) clearInterval(interval);
+      interval = null;
+    }
+    function handleVisibility() {
+      if (document.hidden) stopPolling();
+      else startPolling();
+    }
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   useEffect(() => {
@@ -102,15 +133,26 @@ export function NotificationBell() {
               <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 Notifications
               </span>
-              {unreadCount > 0 && (
+              <div className="flex items-center gap-3">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => markAllNotificationsRead().then(refresh)}
+                    className="text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    Mark all read
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => markAllNotificationsRead().then(refresh)}
-                  className="text-xs font-medium text-brand-600 hover:underline"
+                  onClick={manualRefresh}
+                  disabled={refreshing}
+                  className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+                  aria-label="Refresh notifications"
                 >
-                  Mark all read
+                  <RefreshCw size={13} className={refreshing ? "animate-spin" : undefined} />
                 </button>
-              )}
+              </div>
             </div>
             <div className="max-h-80 overflow-y-auto">
               {items.length === 0 ? (

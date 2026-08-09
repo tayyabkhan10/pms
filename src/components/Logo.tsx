@@ -8,7 +8,7 @@ export function Logo({ size = 32 }: { size?: number }) {
       width={size}
       height={size}
       style={{ width: size, height: size }}
-      className="shrink-0 rounded-md object-contain"
+      className="shrink-0 rounded-md object-contain dark:rounded-full"
       priority
     />
   );

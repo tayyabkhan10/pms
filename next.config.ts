@@ -12,12 +12,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Client-side Router Cache: a page already visited in the last 5 minutes opens instantly
+  // Client-side Router Cache: a page already visited in the last 10 minutes opens instantly
   // from cache instead of re-fetching, on both back/forward nav and re-clicking a sidebar link.
   experimental: {
     staleTimes: {
-      dynamic: 300,
-      static: 300,
+      dynamic: 600,
+      static: 600,
     },
   },
 };

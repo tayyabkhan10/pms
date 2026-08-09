@@ -1,25 +1,27 @@
 "use server";
 
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 
+// Single query: the bell only needs the last 20 anyway, so unreadCount is derived from that
+// same result instead of a second $count round-trip. This runs on a polling interval from
+// every open tab, so keeping it to one DB query matters — the connection pool is small
+// (see src/db/index.ts) and a second concurrent query per poll was starving other requests
+// (including login) of a free connection.
 export async function getMyNotifications() {
   const user = await getCurrentUser();
   if (!user) return { items: [], unreadCount: 0 };
 
-  const [items, unreadCount] = await Promise.all([
-    db.query.notifications.findMany({
-      where: eq(notifications.userId, user.id),
-      orderBy: [desc(notifications.createdAt)],
-      limit: 20,
-    }),
-    db.$count(notifications, and(eq(notifications.userId, user.id), eq(notifications.isRead, false))),
-  ]);
+  const items = await db.query.notifications.findMany({
+    where: eq(notifications.userId, user.id),
+    orderBy: (n, { desc }) => [desc(n.createdAt)],
+    limit: 20,
+  });
 
-  return { items, unreadCount };
+  return { items, unreadCount: items.filter((n) => !n.isRead).length };
 }
 
 export async function markNotificationRead(id: string) {

@@ -105,8 +105,6 @@ export function TaskUpdateRow({ task, latestRequest }: { task: Task; latestReque
         </p>
       )}
 
-      <FileAttachments taskId={task.id} className="mt-3" />
-
       {isPendingApproval && (
         <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Pending admin approval — proposed status: <strong>{latestRequest.requestedStatus}</strong>
@@ -122,6 +120,8 @@ export function TaskUpdateRow({ task, latestRequest }: { task: Task; latestReque
       {expanded && (
         <form action={formAction} className="mt-4 space-y-3 border-t border-zinc-200 pt-4">
           <input type="hidden" name="taskId" value={task.id} />
+
+          <FileAttachments taskId={task.id} />
 
           <div>
             <label className="block text-sm font-medium text-zinc-700">Status</label>
