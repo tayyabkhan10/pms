@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NewTaskTypeForm } from "@/app/admin/task-types/NewTaskTypeForm";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deleteTaskType } from "@/app/admin/task-types/actions";
@@ -11,15 +11,19 @@ type Row = Awaited<ReturnType<typeof getTaskTypesList>>[number];
 export function TaskTypesPanel() {
   const [rows, setRows] = useState<Row[] | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getTaskTypesList().then(setRows);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="max-w-lg">
       <p className="text-sm text-zinc-500">Feeds the Task Type dropdown on the Daily Task Board.</p>
       <div className="mt-4">
-        <NewTaskTypeForm />
+        <NewTaskTypeForm onSuccess={load} />
       </div>
       <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 shadow-sm">
         <table className="min-w-full divide-y divide-zinc-200">
@@ -41,7 +45,10 @@ export function TaskTypesPanel() {
                   <ConfirmDeleteButton
                     id={row.id}
                     confirmMessage={`Delete task type "${row.name}"?`}
-                    action={deleteTaskType}
+                    action={async (id) => {
+                      await deleteTaskType(id);
+                      load();
+                    }}
                   />
                 </td>
               </tr>

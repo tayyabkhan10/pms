@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NewBossForm } from "@/app/admin/bosses/NewBossForm";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deleteBoss } from "@/app/admin/bosses/actions";
@@ -11,15 +11,19 @@ type Row = Awaited<ReturnType<typeof getBossesList>>[number];
 export function BossesPanel() {
   const [rows, setRows] = useState<Row[] | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getBossesList().then(setRows);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="max-w-3xl">
       <p className="text-sm text-zinc-500">Feeds the Boss dropdown on Client Master.</p>
       <div className="mt-4">
-        <NewBossForm />
+        <NewBossForm onSuccess={load} />
       </div>
       <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 shadow-sm">
         <table className="min-w-full divide-y divide-zinc-200">
@@ -55,7 +59,10 @@ export function BossesPanel() {
                   <ConfirmDeleteButton
                     id={row.id}
                     confirmMessage={`Delete boss "${row.name}"?`}
-                    action={deleteBoss}
+                    action={async (id) => {
+                      await deleteBoss(id);
+                      load();
+                    }}
                   />
                 </td>
               </tr>

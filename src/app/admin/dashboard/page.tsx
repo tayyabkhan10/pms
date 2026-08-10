@@ -1,9 +1,9 @@
-import { and, eq, gte, lte, or, isNull } from "drizzle-orm";
+import Link from "next/link";
+import { and, count, eq, gte, lte, ne, or, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { STATUSES, STATUS_STYLES, type StatusName } from "@/lib/status";
 import { toLocalISODate, todayLocalISODate } from "@/lib/date";
-import { AutoSubmitForm } from "@/components/AutoSubmitForm";
 import { StatusDonut } from "./StatusDonut";
 import { TrendChart } from "./TrendChart";
 
@@ -13,48 +13,93 @@ function daysAgo(n: number) {
   return toLocalISODate(d);
 }
 
+const RANGE_OPTIONS = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+  { key: "all", label: "All Data" },
+] as const;
+
+type RangeKey = (typeof RANGE_OPTIONS)[number]["key"];
+
+function rangeLabel(range: RangeKey) {
+  return RANGE_OPTIONS.find((r) => r.key === range)?.label ?? "Today";
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ range?: string }>;
 }) {
-  const { date } = await searchParams;
-  const reportDate = date || todayLocalISODate();
+  const { range: rangeParam } = await searchParams;
+  const range: RangeKey = RANGE_OPTIONS.some((r) => r.key === rangeParam)
+    ? (rangeParam as RangeKey)
+    : "today";
+
+  const today = todayLocalISODate();
   const trendStart = daysAgo(6);
 
-  const [rows, trendRows] = await Promise.all([
-    db.query.tasks.findMany({
-      where: and(eq(tasks.assignedDate, reportDate), isNull(tasks.deletedAt)),
-      with: { client: true, assignee: true },
-      orderBy: (t, { asc }) => [asc(t.statusName)],
-    }),
-    db.query.tasks.findMany({
-      where: and(
-        or(
-          and(gte(tasks.assignedDate, trendStart), lte(tasks.assignedDate, reportDate)),
-          and(gte(tasks.completionDate, trendStart), lte(tasks.completionDate, reportDate))
-        ),
-        isNull(tasks.deletedAt)
+  // "all" drops the assignedDate condition entirely rather than using a huge date window —
+  // cheaper for the DB and avoids ever missing rows near the boundary.
+  const rangeCondition =
+    range === "all"
+      ? undefined
+      : and(
+          gte(tasks.assignedDate, range === "today" ? today : range === "week" ? daysAgo(6) : daysAgo(29)),
+          lte(tasks.assignedDate, today)
+        );
+
+  const where = rangeCondition
+    ? and(rangeCondition, isNull(tasks.deletedAt))
+    : isNull(tasks.deletedAt);
+
+  // Counts come from SQL aggregates (GROUP BY / COUNT), not from pulling every matching row
+  // into JS and filtering — "All Data" can span the whole tasks table as it grows, and the old
+  // approach re-fetched (with client/assignee joins) and re-counted that entire table on every
+  // dashboard load. The two list sections below only need a bounded, capped set of rows since
+  // they're just showing examples to act on, not a full export.
+  const LIST_CAP = 200;
+  const [statusGroups, updateNotSentCount, blockedRows, updateNotSentRows, trendRows] =
+    await Promise.all([
+      db
+        .select({ status: tasks.statusName, n: count() })
+        .from(tasks)
+        .where(where)
+        .groupBy(tasks.statusName),
+      db.$count(
+        tasks,
+        and(where, eq(tasks.clientUpdateSent, false), ne(tasks.statusName, "Not Started"))
       ),
-      columns: { assignedDate: true, completionDate: true },
-    }),
-  ]);
+      db.query.tasks.findMany({
+        where: and(where, eq(tasks.statusName, "Blocked")),
+        with: { client: true, assignee: true },
+        orderBy: (t, { desc }) => [desc(t.assignedDate)],
+        limit: LIST_CAP,
+      }),
+      db.query.tasks.findMany({
+        where: and(where, eq(tasks.clientUpdateSent, false), ne(tasks.statusName, "Not Started")),
+        with: { client: true, assignee: true },
+        orderBy: (t, { desc }) => [desc(t.assignedDate)],
+        limit: LIST_CAP,
+      }),
+      db.query.tasks.findMany({
+        where: and(
+          or(
+            and(gte(tasks.assignedDate, trendStart), lte(tasks.assignedDate, today)),
+            and(gte(tasks.completionDate, trendStart), lte(tasks.completionDate, today))
+          ),
+          isNull(tasks.deletedAt)
+        ),
+        columns: { assignedDate: true, completionDate: true },
+      }),
+    ]);
 
-  const pending: TaskRow[] = [];
-  const completed: TaskRow[] = [];
-  const blocked: TaskRow[] = [];
-  const updateNotSent: TaskRow[] = [];
-  const statusCountMap = new Map<string, number>(STATUSES.map((name) => [name, 0]));
-
-  for (const r of rows) {
-    if (r.statusName !== "Completed") pending.push(r);
-    if (r.statusName === "Completed") completed.push(r);
-    if (r.statusName === "Blocked") blocked.push(r);
-    if (!r.clientUpdateSent && r.statusName !== "Not Started") updateNotSent.push(r);
-    statusCountMap.set(r.statusName, (statusCountMap.get(r.statusName) ?? 0) + 1);
-  }
-
+  const statusCountMap = new Map(statusGroups.map((g) => [g.status, g.n]));
   const statusCounts = STATUSES.map((name) => ({ name, value: statusCountMap.get(name) ?? 0 }));
+  const totalCount = statusGroups.reduce((sum, g) => sum + g.n, 0);
+  const completedCount = statusCountMap.get("Completed") ?? 0;
+  const pendingCount = totalCount - completedCount;
+  const blockedCount = statusCountMap.get("Blocked") ?? 0;
 
   const trendCounts = new Map<string, { assigned: number; completed: number }>();
   for (const r of trendRows) {
@@ -84,32 +129,35 @@ export default async function DashboardPage({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Dashboard</h1>
-        <AutoSubmitForm className="flex items-center gap-2 text-sm">
-          <label htmlFor="date" className="text-zinc-600">
-            Report Date
-          </label>
-          <input
-            id="date"
-            name="date"
-            type="date"
-            defaultValue={reportDate}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900"
-          />
-        </AutoSubmitForm>
+        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+          {RANGE_OPTIONS.map((r) => (
+            <Link
+              key={r.key}
+              href={r.key === "today" ? "/admin/dashboard" : `/admin/dashboard?range=${r.key}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                range === r.key
+                  ? "bg-white text-brand-700 shadow-sm"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              {r.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Total Tasks" value={rows.length} />
-        <StatCard label="Completed" value={completed.length} tone="green" />
-        <StatCard label="Pending" value={pending.length} tone="brand" />
-        <StatCard label="Blocked" value={blocked.length} tone="red" />
-        <StatCard label="Update Not Sent" value={updateNotSent.length} tone="red" />
+        <StatCard label="Total Tasks" value={totalCount} />
+        <StatCard label="Completed" value={completedCount} tone="green" />
+        <StatCard label="Pending" value={pendingCount} tone="brand" />
+        <StatCard label="Blocked" value={blockedCount} tone="red" />
+        <StatCard label="Update Not Sent" value={updateNotSentCount} tone="red" />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-zinc-200/70 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-zinc-900">Status Breakdown</h2>
-          <p className="text-xs text-zinc-500">For {reportDate}</p>
+          <p className="text-xs text-zinc-500">{rangeLabel(range)}</p>
           <StatusDonut data={statusCounts} />
         </div>
         <div className="rounded-xl border border-zinc-200/70 bg-white p-5 shadow-sm">
@@ -119,11 +167,19 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <Section title="Blocked Tasks" rows={blocked} emptyText="No blocked tasks for this date." />
+      <Section
+        title="Blocked Tasks"
+        rows={blockedRows}
+        totalCount={blockedCount}
+        cap={LIST_CAP}
+        emptyText={`No blocked tasks — ${rangeLabel(range)}.`}
+      />
       <Section
         title="Client Update Not Sent"
-        rows={updateNotSent}
-        emptyText="All client updates sent for this date."
+        rows={updateNotSentRows}
+        totalCount={updateNotSentCount}
+        cap={LIST_CAP}
+        emptyText={`All client updates sent — ${rangeLabel(range)}.`}
       />
     </div>
   );
@@ -166,15 +222,24 @@ type TaskRow = {
 function Section({
   title,
   rows,
+  totalCount,
+  cap,
   emptyText,
 }: {
   title: string;
   rows: TaskRow[];
+  totalCount: number;
+  cap: number;
   emptyText: string;
 }) {
   return (
     <div className="mt-6">
-      <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
+        {totalCount > cap && (
+          <span className="text-xs text-zinc-400">Showing {cap} of {totalCount}</span>
+        )}
+      </div>
       <div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 shadow-sm">
         <table className="min-w-full divide-y divide-zinc-200">
           <tbody className="divide-y divide-zinc-200 bg-white">

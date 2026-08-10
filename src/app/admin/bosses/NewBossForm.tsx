@@ -5,13 +5,16 @@ import { createBoss, type ActionState } from "./actions";
 
 const initialState: ActionState = {};
 
-export function NewBossForm() {
+export function NewBossForm({ onSuccess }: { onSuccess?: () => void }) {
   const [state, formAction, isPending] = useActionState(createBoss, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (state.success) formRef.current?.reset();
-  }, [state.success]);
+    if (state.success) {
+      formRef.current?.reset();
+      onSuccess?.();
+    }
+  }, [state.success, onSuccess]);
 
   return (
     <form ref={formRef} action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

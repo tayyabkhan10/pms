@@ -12,6 +12,9 @@ export function ApprovalsTabs({
   historyPanel: React.ReactNode;
 }) {
   const [tab, setTab] = useState<"pending" | "history">("pending");
+  // History's panel is a client component that fetches on mount — keeping it mounted (just
+  // hidden) once opened avoids re-querying every time the admin flips back to it.
+  const [historyOpened, setHistoryOpened] = useState(false);
 
   return (
     <div>
@@ -32,7 +35,10 @@ export function ApprovalsTabs({
           Pending {pendingCount > 0 && `(${pendingCount})`}
         </button>
         <button
-          onClick={() => setTab("history")}
+          onClick={() => {
+            setTab("history");
+            setHistoryOpened(true);
+          }}
           className={`border-b-2 px-3 py-2 text-sm font-medium ${
             tab === "history"
               ? "border-brand-600 text-brand-600"
@@ -44,7 +50,8 @@ export function ApprovalsTabs({
       </div>
 
       <div className="mt-6">
-        {tab === "pending" ? pendingPanel : historyPanel}
+        <div className={tab === "pending" ? "" : "hidden"}>{pendingPanel}</div>
+        {historyOpened && <div className={tab === "history" ? "" : "hidden"}>{historyPanel}</div>}
       </div>
     </div>
   );

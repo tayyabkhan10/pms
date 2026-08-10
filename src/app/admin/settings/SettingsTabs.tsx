@@ -12,6 +12,15 @@ export function SettingsTabs({
   taskTypesPanel: React.ReactNode;
 }) {
   const [tab, setTab] = useState<"platforms" | "bosses" | "taskTypes">("platforms");
+  // Once a tab has been opened, its panel stays mounted (just hidden) instead of unmounting —
+  // each panel fetches its own data once on mount, so unmounting on every tab switch meant
+  // re-querying the DB every time the admin flipped back to a tab they'd already visited.
+  const [visited, setVisited] = useState<Set<string>>(() => new Set(["platforms"]));
+
+  function selectTab(key: "platforms" | "bosses" | "taskTypes") {
+    setTab(key);
+    setVisited((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  }
 
   const tabs = [
     { key: "platforms" as const, label: "Platforms" },
@@ -27,7 +36,7 @@ export function SettingsTabs({
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => selectTab(t.key)}
             className={`border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t.key
                 ? "border-brand-600 text-brand-600"
@@ -40,9 +49,15 @@ export function SettingsTabs({
       </div>
 
       <div className="mt-6">
-        {tab === "platforms" && platformsPanel}
-        {tab === "bosses" && bossesPanel}
-        {tab === "taskTypes" && taskTypesPanel}
+        {visited.has("platforms") && (
+          <div className={tab === "platforms" ? "" : "hidden"}>{platformsPanel}</div>
+        )}
+        {visited.has("bosses") && (
+          <div className={tab === "bosses" ? "" : "hidden"}>{bossesPanel}</div>
+        )}
+        {visited.has("taskTypes") && (
+          <div className={tab === "taskTypes" ? "" : "hidden"}>{taskTypesPanel}</div>
+        )}
       </div>
     </div>
   );

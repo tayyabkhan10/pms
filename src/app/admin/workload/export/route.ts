@@ -1,6 +1,6 @@
-import { and, gte, lte, isNull } from "drizzle-orm";
+import { and, gte, lte, isNull, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { tasks } from "@/db/schema";
+import { tasks, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/authGuard";
 import { resolveDateRange } from "@/lib/dateRange";
 import { toCSV, csvResponse } from "@/lib/csv";
@@ -15,33 +15,22 @@ export async function GET(request: Request) {
     to: searchParams.get("to") || undefined,
   });
 
-  const rows = await db.query.tasks.findMany({
-    where: and(gte(tasks.assignedDate, from), lte(tasks.assignedDate, to), isNull(tasks.deletedAt)),
-    columns: { statusName: true, clientUpdateSent: true, timeSpentMinutes: true },
-    with: { assignee: { columns: { id: true, name: true } } },
-  });
+  // Same SQL-side aggregation as /admin/workload — see that page for why.
+  const summary = await db
+    .select({
+      name: users.name,
+      total: sql<number>`count(*)`.mapWith(Number),
+      completed: sql<number>`count(*) filter (where ${tasks.statusName} = 'Completed')`.mapWith(Number),
+      pendingUpdates: sql<number>`count(*) filter (where ${tasks.clientUpdateSent} = false)`.mapWith(Number),
+      minutes: sql<number>`coalesce(sum(${tasks.timeSpentMinutes}), 0)`.mapWith(Number),
+    })
+    .from(tasks)
+    .innerJoin(users, eq(users.id, tasks.assignedTo))
+    .where(and(gte(tasks.assignedDate, from), lte(tasks.assignedDate, to), isNull(tasks.deletedAt)))
+    .groupBy(tasks.assignedTo, users.name)
+    .orderBy(sql`count(*) desc`);
 
-  const byEmployee = new Map<
-    string,
-    { name: string; total: number; completed: number; pendingUpdates: number; minutes: number }
-  >();
-  for (const row of rows) {
-    const key = row.assignee.id;
-    const entry = byEmployee.get(key) ?? {
-      name: row.assignee.name,
-      total: 0,
-      completed: 0,
-      pendingUpdates: 0,
-      minutes: 0,
-    };
-    entry.total += 1;
-    if (row.statusName === "Completed") entry.completed += 1;
-    if (!row.clientUpdateSent) entry.pendingUpdates += 1;
-    entry.minutes += row.timeSpentMinutes;
-    byEmployee.set(key, entry);
-  }
-
-  const csv = toCSV(Array.from(byEmployee.values()).sort((a, b) => b.total - a.total), [
+  const csv = toCSV(summary, [
     { key: "name", label: "Employee" },
     { key: "total", label: "Total Tasks" },
     { key: "completed", label: "Completed" },

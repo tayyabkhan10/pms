@@ -5,13 +5,16 @@ import { createPlatform, type ActionState } from "./actions";
 
 const initialState: ActionState = {};
 
-export function NewPlatformForm() {
+export function NewPlatformForm({ onSuccess }: { onSuccess?: () => void }) {
   const [state, formAction, isPending] = useActionState(createPlatform, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (state.success) formRef.current?.reset();
-  }, [state.success]);
+    if (state.success) {
+      formRef.current?.reset();
+      onSuccess?.();
+    }
+  }, [state.success, onSuccess]);
 
   return (
     <form ref={formRef} action={formAction} className="flex items-start gap-3">

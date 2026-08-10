@@ -5,7 +5,15 @@ import { renamePlatform } from "./actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deletePlatform } from "./actions";
 
-export function PlatformRow({ id, name }: { id: string; name: string }) {
+export function PlatformRow({
+  id,
+  name,
+  onDeleted,
+}: {
+  id: string;
+  name: string;
+  onDeleted?: () => void;
+}) {
   const [value, setValue] = useState(name);
   const [isPending, startTransition] = useTransition();
 
@@ -28,7 +36,10 @@ export function PlatformRow({ id, name }: { id: string; name: string }) {
         <ConfirmDeleteButton
           id={id}
           confirmMessage={`Delete platform "${name}"?`}
-          action={deletePlatform}
+          action={async (id) => {
+            await deletePlatform(id);
+            onDeleted?.();
+          }}
         />
       </td>
     </tr>

@@ -12,6 +12,9 @@ export function EmployeeTasksTabs({
   historyPanel: React.ReactNode;
 }) {
   const [tab, setTab] = useState<"active" | "history">("active");
+  // History's panel is a client component that fetches on mount — keeping it mounted (just
+  // hidden) once opened avoids re-querying every time it's switched back to.
+  const [historyOpened, setHistoryOpened] = useState(false);
 
   return (
     <div>
@@ -29,7 +32,10 @@ export function EmployeeTasksTabs({
           Active {activeCount > 0 && `(${activeCount})`}
         </button>
         <button
-          onClick={() => setTab("history")}
+          onClick={() => {
+            setTab("history");
+            setHistoryOpened(true);
+          }}
           className={`border-b-2 px-3 py-2 text-sm font-medium ${
             tab === "history"
               ? "border-brand-600 text-brand-600"
@@ -40,7 +46,10 @@ export function EmployeeTasksTabs({
         </button>
       </div>
 
-      <div className="mt-6">{tab === "active" ? activePanel : historyPanel}</div>
+      <div className="mt-6">
+        <div className={tab === "active" ? "" : "hidden"}>{activePanel}</div>
+        {historyOpened && <div className={tab === "history" ? "" : "hidden"}>{historyPanel}</div>}
+      </div>
     </div>
   );
 }
