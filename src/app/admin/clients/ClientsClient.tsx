@@ -1,7 +1,8 @@
+// src/admin/clients/ClientsClient.tsx
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, ExternalLink } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { deleteClient, createClient, updateClient } from "./actions";
@@ -25,6 +26,20 @@ type Row = {
   boss: { name: string } | null;
   defaultEmployee: { name: string } | null;
 };
+
+// Small helper: truncated text with the full value available on hover via `title`.
+function TruncatedCell({ value, maxWidth = "12rem" }: { value: string | null; maxWidth?: string }) {
+  if (!value) return <span className="text-zinc-400">—</span>;
+  return (
+    <span
+      title={value}
+      className="block truncate text-zinc-600"
+      style={{ maxWidth }}
+    >
+      {value}
+    </span>
+  );
+}
 
 export function ClientsClient({
   rows,
@@ -66,6 +81,9 @@ export function ClientsClient({
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Boss</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Brand/Group</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Default Employee</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Store Link</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Login Notes</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">General Notes</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Status</th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase text-zinc-500">Actions</th>
             </tr>
@@ -73,7 +91,7 @@ export function ClientsClient({
           <tbody className="divide-y divide-zinc-200 bg-white">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-zinc-500">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-zinc-500">
                   No clients yet.
                 </td>
               </tr>
@@ -85,6 +103,28 @@ export function ClientsClient({
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.boss?.name ?? "—"}</td>
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.brandGroup ?? "—"}</td>
                 <td className="px-4 py-2 text-sm text-zinc-600">{row.defaultEmployee?.name ?? "—"}</td>
+                <td className="px-4 py-2 text-sm">
+                  {row.storeLink ? (
+                    <a
+                      href={row.storeLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={row.storeLink}
+                      className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700"
+                    >
+                      <ExternalLink size={14} className="shrink-0" />
+                      <span className="block max-w-[12rem] truncate">{row.storeLink}</span>
+                    </a>
+                  ) : (
+                    <span className="text-zinc-400">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  <TruncatedCell value={row.loginNotes} />
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  <TruncatedCell value={row.generalNotes} />
+                </td>
                 <td className="px-4 py-2 text-sm">
                   <span
                     className={
